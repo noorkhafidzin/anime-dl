@@ -1,0 +1,41 @@
+import os
+import random
+import asyncio
+from flask import Flask, request, jsonify
+from myjdapi import Myjdapi
+from playwright.async_api import async_playwright
+
+app = Flask(__name__)
+
+JD_EMAIL = os.getenv("JD_EMAIL")
+JD_PASSWORD = os.getenv("JD_PASSWORD")
+JD_DEVICE = os.getenv("JD_DEVICE")
+
+@app.route('/add', methods=['POST'])
+def add_link():
+    try:
+        data = request.json
+        url = data.get('url')
+        package_name = data.get('packageName')
+
+        jd = Myjdapi()
+        jd.connect(JD_EMAIL, JD_PASSWORD)
+        jd.update_devices()
+        device = jd.get_device(JD_DEVICE)
+
+        link_data = {
+            "autostart": True,
+            "links": url
+        }
+
+        if package_name:
+            link_data["packageName"] = package_name
+
+        result = device.linkgrabber.add_links([link_data])
+
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

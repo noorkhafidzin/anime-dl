@@ -1,0 +1,22 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+venv/
+.env/
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Gunicorn
+*.pid
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,115 @@
+import os
+import random
+import asyncio
+from flask import Flask, request, jsonify
+from myjdapi import Myjdapi
+from playwright.async_api import async_playwright
+
+app = Flask(__name__)
+
+JD_EMAIL = os.getenv("JD_EMAIL")
+JD_PASSWORD = os.getenv("JD_PASSWORD")
+JD_DEVICE = os.getenv("JD_DEVICE")
+
+USER_AGENTS = [
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123 Safari/537.36",
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:124.0) Gecko/20100101 Firefox/124.0"
+]
+
+async def stealth_actions(page):
+    """Implementasi stealth yang kompatibel"""
+    await page.add_init_script("""
+        () => {
+            const originalQuery = window.navigator.permissions.query;
+            window.navigator.permissions.query = (parameters) => (
+                parameters.name === 'notifications' ?
+                    Promise.resolve({ state: Notification.permission }) :
+                    originalQuery(parameters)
+            );
+
+            Object.defineProperty(navigator, 'webdriver', {
+                get: () => false,
+            });
+
+            Object.defineProperty(navigator, 'plugins', {
+                get: () => [1, 2, 3],
+            });
+
+            Object.defineProperty(navigator, 'languages', {
+                get: () => ['en-US', 'en'],
+            });
+        }
+    """)
+
+async def get_cookies_from_cloudflare(url):
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage"
+            ]
+        )
+        
+        context = await browser.new_context(
+            user_agent=random.choice(USER_AGENTS),
+            viewport={"width": 1366, "height": 768},
+            ignore_https_errors=True
+        )
+
+        page = await context.new_page()
+        
+        # Terapkan stealth sebelum navigasi
+        await stealth_actions(page)
+        
+        try:
+            await page.goto(url, wait_until="networkidle", timeout=60000)
+            
+            # Simulasi interaksi manusia
+            await page.mouse.move(100, 100)
+            await page.wait_for_timeout(1000)
+            await page.keyboard.press("PageDown")
+            
+            cookies = await context.cookies()
+            return cookies
+        except Exception as e:
+            raise e
+        finally:
+            await browser.close()
+
+@app.route('/add', methods=['POST'])
+def add_link():
+    try:
+        data = request.json
+        url = data.get('url')
+        package_name = data.get('packageName')
+
+        cookies = asyncio.run(get_cookies_from_cloudflare(url))
+
+        jd = Myjdapi()
+        jd.connect(JD_EMAIL, JD_PASSWORD)
+        jd.update_devices()
+        device = jd.get_device(JD_DEVICE)
+
+        cookie_str = "; ".join([f"{c['name']}={c['value']}" for c in cookies])
+
+        link_data = {
+            "autostart": True,
+            "links": url,
+            "cookies": cookie_str
+        }
+
+        if package_name:
+            link_data["packageName"] = package_name
+
+        result = device.linkgrabber.add_links([link_data])
+
+        return jsonify({"success": True, "result": result})
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=5000)

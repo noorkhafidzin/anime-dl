@@ -1,17 +1,41 @@
 [Unit]
-Description=anime-dl API Service
-After=network.target
+Description=anime-dl API Server
+After=network-online.target
+Wants=network-online.target
 
 [Service]
+Type=simple
 User=el
-WorkingDirectory=/opt/anime-dl/app
-ExecStart=/opt/anime-dl/.venv/bin/gunicorn -w 2 --max-requests 300 --max-requests-jitter 50 -b 0.0.0.0:5000 jd2-server:app
-Environment="JD_EMAIL=YOUR_JD2_EMAIL"
-Environment="JD_PASSWORD=YOUR_JD2_PASSWORD"
-Environment="JD_DEVICE=YOUR_JD2_DEVICE"
+Group=el
+
+WorkingDirectory=/opt/anime-dl
+
+ExecStart=/opt/anime-dl/.venv/bin/gunicorn \
+  --workers 2 \
+  --max-requests 300 \
+  --max-requests-jitter 50 \
+  --bind 0.0.0.0:5000 \
+  app.api:app
 
 Restart=always
-RestartSec=10
+RestartSec=5
+
+Environment=VIRTUAL_ENV=/opt/anime-dl/.venv
+Environment=PATH=/opt/anime-dl/.venv/bin:/usr/bin:/bin
+
+# ENV credential
+Environment="JD_EMAIL=YOUR_JD2_EMAIL"
+Environment="JD_PASSWORD=YOUR_JD2_PASSWORD"
+Environment="JD_DEVICE=YOUR_JD2_DEVICE_NAME"
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/anime-dl
+
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target

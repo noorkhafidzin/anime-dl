@@ -13,13 +13,29 @@ logging.basicConfig(
     format="[%(asctime)s] %(levelname)s in %(module)s: %(message)s"
 )
 
-JD_EMAIL = os.getenv("JD_EMAIL")
-JD_PASSWORD = os.getenv("JD_PASSWORD")
-JD_DEVICE = os.getenv("JD_DEVICE")
+# =========================================================
+# lazy loader for MyJDownloader client
+# =========================================================
 
-if not JD_EMAIL or not JD_PASSWORD or not JD_DEVICE:
-    raise RuntimeError("Environment variable JD_EMAIL, JD_PASSWORD, or JD_DEVICE is not set.")
+_myjd_client = None
+_client_lock = threading.Lock()
 
+def get_client():
+    global _myjd_client
+
+    with _client_lock:
+        if _myjd_client:
+            return _myjd_client
+
+        email = os.getenv("JD_EMAIL")
+        password = os.getenv("JD_PASSWORD")
+        device = os.getenv("JD_DEVICE")
+
+        if not email or not password or not device:
+            raise RuntimeError("JD_EMAIL, JD_PASSWORD, JD_DEVICE env not set")
+
+        _myjd_client = MyJDClient(email, password, device)
+        return _myjd_client
 
 # =========================================================
 # MyJDownloader Auto-Reconnect Client
@@ -66,10 +82,6 @@ class MyJDClient:
             )
 
 
-# Global client instance
-myjd_client = MyJDClient(JD_EMAIL, JD_PASSWORD, JD_DEVICE)
-
-
 # =========================================================
 # API Endpoint
 # =========================================================
@@ -81,7 +93,8 @@ def add_link():
         return jsonify({"success": False, "error": "Missing 'links' in JSON body"}), 400
 
     try:
-        myjd_client.add_links(data["links"])
+        client = get_client()
+        client.add_links(data["links"])
         return jsonify({"success": True})
     except Exception as e:
         logging.exception("Failed to add links to MyJDownloader")

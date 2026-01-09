@@ -8,7 +8,7 @@ Type=simple
 User=el
 Group=el
 
-WorkingDirectory=/opt/anime-dl/src
+WorkingDirectory=/opt/anime-dl
 
 ExecStart=/opt/anime-dl/.venv/bin/python /opt/anime-dl/app/anime-dl.py --config /opt/anime-dl/config/config.yaml
 

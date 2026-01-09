@@ -10,7 +10,7 @@ Group=el
 
 WorkingDirectory=/opt/anime-dl
 
-ExecStart=/opt/anime-dl/.venv/bin/python /opt/anime-dl/app/anime-dl.py --config /opt/anime-dl/config/config.yaml
+ExecStart=/opt/anime-dl/.venv/bin/python -u /opt/anime-dl/app/anime-dl.py --config /opt/anime-dl/config/config.yaml
 
 Restart=always
 RestartSec=5

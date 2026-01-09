@@ -44,16 +44,47 @@ def load_config(path: Path):
         raise SystemExit("Please use a YAML config (path ending with .yaml)")
 
 
+class ConfigManager:
+    """Objek tunggal untuk menyimpan data konfigurasi yang bisa berubah-ubah."""
+    def __init__(self, path: Path):
+        self.path = path.resolve()
+        self.data = load_config(self.path)
+
+    def reload(self):
+        try:
+            # Memanggil fungsi load_config yang sudah Anda punya
+            self.data = load_config(self.path)
+            logging.info("--- CONFIG RELOADED SUCCESSFULLY ---")
+        except Exception as e:
+            logging.error(f"Failed to reload config: {e}")
+
+class ConfigReloaderHandler(FileSystemEventHandler):
+    """Handler khusus yang hanya mengawasi file config.yaml."""
+    def __init__(self, config_manager):
+        self.config_manager = config_manager
+
+    def on_modified(self, event):
+        # Memastikan hanya memproses jika file config.yaml yang diubah
+        if Path(event.src_path).resolve() == self.config_manager.path:
+            self.config_manager.reload()
+
 def setup_logging(log_file: str):
     log_path = Path(log_file)
     log_path.parent.mkdir(parents=True, exist_ok=True)
-    handler = RotatingFileHandler(str(log_path), maxBytes=10 * 1024 * 1024, backupCount=3)
     fmt = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-    handler.setFormatter(fmt)
+    
+    file_handler = RotatingFileHandler(str(log_path), maxBytes=10 * 1024 * 1024, backupCount=3)
+    file_handler.setFormatter(fmt)
+    
+    stream_handler = logging.StreamHandler(sys.stdout)
+    stream_handler.setFormatter(fmt)
+
     root = logging.getLogger()
     root.setLevel(logging.INFO)
-    root.addHandler(handler)
-
+    if root.hasHandlers():
+        root.handlers.clear()
+    root.addHandler(file_handler)
+    root.addHandler(stream_handler)
 
 def human_size(num: int):
     for unit in ["B", "KB", "MB", "GB", "TB"]:
@@ -225,20 +256,18 @@ def process_file(path: Path, cfg: dict):
 
 
 class WatchHandler(FileSystemEventHandler):
-    def __init__(self, cfg):
+    def __init__(self, config_manager):
         super().__init__()
-        self.cfg = cfg
+        self.config_manager = config_manager
 
     def on_created(self, event):
         if event.is_directory:
-            return
-        process_file(Path(event.src_path), self.cfg)
+            process_file(Path(event.src_path), self.config_manager.data)
 
     def on_moved(self, event):
         if event.is_directory:
             return
-        process_file(Path(event.dest_path), self.cfg)
-
+        process_file(Path(event.dest_path), self.config_manager.data)
 
 def initial_scan(watch_dir: Path, cfg: dict):
     for p in watch_dir.rglob('*'):
@@ -252,7 +281,8 @@ def main():
     args = ap.parse_args()
 
     cfg_path = Path(args.config)
-    cfg = load_config(cfg_path)
+    config_manager = ConfigManager(cfg_path)
+    cfg = config_manager.data
 
     setup_logging(cfg.get('log_file', 'logs/anime-dl.log'))
 
@@ -275,8 +305,13 @@ def main():
 
     logging.info('Starting watcher...')
     observer = Observer()
-    handler = WatchHandler(cfg)
-    observer.schedule(handler, str(watch_dir), recursive=True)
+
+    anime_handler = WatchHandler(config_manager)
+    observer.schedule(anime_handler, str(watch_dir), recursive=True)
+
+    config_handler = ConfigReloaderHandler(config_manager)
+    observer.schedule(config_handler, str(cfg_path.parent), recursive=False)
+
     observer.start()
     try:
         while True:

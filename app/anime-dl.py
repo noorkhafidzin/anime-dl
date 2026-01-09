@@ -82,6 +82,14 @@ def stable_file(path: Path, checks: int = 2, delay: float = 1.0) -> bool:
 
 
 def extract_episode(filename: str):
+    import re
+    # Search pattern: Season + Episode (S05E01, S5--01, S5.01)
+    s_e_match = re.search(r"S(?P<s>\d{1,2})[ \-_.]+(?P<e>\d{1,4})", filename, re.IGNORECASE)
+    if s_e_match:
+        s = s_e_match.group("s")
+        e = s_e_match.group("e")
+        return int(e), int(s)
+
     # Prioritized patterns
     pat_list = [
         r"S(?P<s>\d{1,2})[ \-_.]*E(?P<e>\d{1,4})",

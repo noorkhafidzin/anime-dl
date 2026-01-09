@@ -11,7 +11,7 @@ app = Flask(__name__)
 
 # ---- Logging setup ----
 # Konfigurasi Path Log
-LOG_FILE = os.getenv("LOG_FILE", "logs/jdownloader-api.log")
+LOG_FILE = os.getenv("LOG_FILE", "logs/api.log")
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
 # Format Log

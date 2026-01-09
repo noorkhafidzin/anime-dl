@@ -1,6 +1,8 @@
 import os
 import logging
 import threading
+import sys
+from logging.handlers import RotatingFileHandler
 from flask import Flask, request, jsonify
 from myjdapi import Myjdapi
 from myjdapi.exception import MYJDTokenInvalidException
@@ -8,10 +10,26 @@ from myjdapi.exception import MYJDTokenInvalidException
 app = Flask(__name__)
 
 # ---- Logging setup ----
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] %(levelname)s in %(module)s: %(message)s"
-)
+# Konfigurasi Path Log
+LOG_FILE = os.getenv("LOG_FILE", "logs/jdownloader-api.log")
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+
+# Format Log
+log_format = logging.Formatter("[%(asctime)s] %(levelname)s in %(module)s: %(message)s")
+
+# Handler 1: Terminal (STDOUT) - Agar muncul di systemctl status
+stream_handler = logging.StreamHandler(sys.stdout)
+stream_handler.setFormatter(log_format)
+
+# Handler 2: File (Rotating)
+file_handler = RotatingFileHandler(LOG_FILE, maxBytes=5*1024*1024, backupCount=2)
+file_handler.setFormatter(log_format)
+
+# Terapkan ke Root Logger
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logger.addHandler(stream_handler)
+logger.addHandler(file_handler)
 
 # =========================================================
 # lazy loader for MyJDownloader client

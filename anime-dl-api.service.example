@@ -9,7 +9,7 @@ User=el
 Group=el
 
 WorkingDirectory=/opt/anime-dl
-
+Environment=PYTHONUNBUFFERED=1
 ExecStart=/opt/anime-dl/.venv/bin/gunicorn \
   --workers 2 \
   --max-requests 300 \

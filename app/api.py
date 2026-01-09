@@ -65,22 +65,24 @@ class MyJDClient:
             self.device = device
             logging.warning("MyJDownloader connected successfully.")
 
-    def add_links(self, links):
+    def add_links(self, links, package_name=None):
         try:
-            return self.jd.linkgrabber.add_links(
-                self.device,
-                links,
-                autostart=True
-            )
-        except MYJDTokenInvalidException:
-            logging.error("MYJD TOKEN INVALID → reconnecting...")
-            self.connect()
-            return self.jd.linkgrabber.add_links(
-                self.device,
-                links,
-                autostart=True
-            )
+            # Jika package_name tidak dikirim, JDownloader akan otomatis menentukan nama package
+            params = {
+                "autostart": True,
+                "links": "\n".join(links) if isinstance(links, list) else links,
+            }
+            
+            if package_name:
+                params["packageName"] = package_name
 
+            return self.device.linkgrabber.add_links([params])
+
+        except (MYJDTokenInvalidException, AttributeError):
+            logging.error("Token invalid or device disconnected → reconnecting...")
+            self.connect()
+            # Ulangi proses setelah reconnect
+            return self.device.linkgrabber.add_links([params])
 
 # =========================================================
 # API Endpoint
@@ -92,9 +94,11 @@ def add_link():
     if not data or "links" not in data:
         return jsonify({"success": False, "error": "Missing 'links' in JSON body"}), 400
 
+    links = data["links"]
+    package_name = data.get("packageName")
     try:
         client = get_client()
-        client.add_links(data["links"])
+        client.add_links(links, package_name=package_name)
         return jsonify({"success": True})
     except Exception as e:
         logging.exception("Failed to add links to MyJDownloader")

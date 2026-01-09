@@ -1,0 +1,23 @@
+watch_dir: /path/to/watch
+log_file: logs/anime-dl.log
+discord_webhook: "https://discord.com/api/webhooks/XXX/YYY"
+
+titles:
+  naruto: "Naruto"
+  example: "Contoh Anime"
+
+library_dirs:
+  naruto: /path/to/library/Naruto
+  example: /path/to/library/Contoh
+
+mappings:
+  - pattern: "naruto"
+    anime_key: naruto
+    season: 1
+    aliases: ["NRT", "nrt"]
+  - pattern: "example-show"
+    anime_key: example
+    season: 1
+    episode_offset:
+      start: 13     # mulai episode ini
+      subtract: 12  # jadi: episode_baru = episode_lama - 12

@@ -1,0 +1,41 @@
+[Unit]
+Description=anime-dl Library Organizer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=el
+Group=el
+
+WorkingDirectory=/opt/anime-dl/src
+
+ExecStart=/opt/anime-dl/.venv/bin/python /opt/anime-dl/app/anime-dl.py --config /opt/anime-dl/config/config.yaml
+
+Restart=always
+RestartSec=5
+ 
+MemoryMax=500M
+
+LimitNOFILE=8192
+
+# Environment virtualenv
+Environment=VIRTUAL_ENV=/opt/anime-dl/.venv
+Environment=PATH=/opt/anime-dl/.venv/bin:/usr/bin:/bin
+
+# Graceful shutdown
+KillSignal=SIGINT
+TimeoutStopSec=20
+
+# Small Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/anime-dl
+
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

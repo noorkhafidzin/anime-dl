@@ -342,7 +342,7 @@ footer="""
 
 <div class="footer-container">
     <div class="footer-center">
-        <span>anime-dl • <a href="#">@noorkhafidzin</a></span>
+        <span>anime-dl • <a href="https://noorkhafidzin.com">@noorkhafidzin</a></span>
     </div>
     <div class="footer-right">
         Support me on: <a href="https://trakteer.id/noorkhafidzin/tip" target="_blank">☕ Ko-Fi</a> | | <a href="https://ko-fi.com/noorkhafidzin" target="_blank">🍪 Trakteer</a>

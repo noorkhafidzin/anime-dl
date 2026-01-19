@@ -176,17 +176,20 @@ def parse_mapping(filename: str, mappings: list):
         pat = m.get("pattern")
         if pat:
             try:
-                if re.search(pat, filename, re.IGNORECASE):
-                    return m
+                match = re.search(pat, filename, re.IGNORECASE)
+                if match:
+                    ep_from_group = match.groupdict().get('e')
+                    if ep_from_group:
+                        return m, int(ep_from_group)
+                    return m, None
             except re.error:
                 logging.warning("Invalid regex in mapping: %s", pat)
         # then try aliases list (token based)
         aliases = m.get("aliases") or []
         for a in aliases:
             if a.lower() in tokens:
-                return m
-    return None
-    return None
+                return m, None
+    return None, None
 
 
 def notify_discord(webhook: str, anime_title: str, new_name: str, filesize: str, season: int):
@@ -218,7 +221,7 @@ def process_file(path: Path, cfg: dict):
         logging.info("SKIPPED: file not stable yet - %s", filename)
         return
 
-    m = parse_mapping(filename, cfg.get('mappings', []))
+    m, ep_from_mapping = parse_mapping(filename, cfg.get('mappings', []))
     if not m:
         logging.info("SKIPPED: pattern not matched - %s", filename)
         return
@@ -227,8 +230,12 @@ def process_file(path: Path, cfg: dict):
     season_cfg = m.get('season')
     anime_title = cfg.get('titles', {}).get(anime_key, anime_key)
 
-    ep_num, season_from_name = extract_episode(filename)
-    season = season_from_name if season_from_name else season_cfg
+    if ep_from_mapping is not None:
+        ep_num = ep_from_mapping
+        season = season_cfg
+    else:
+        ep_num, season_from_name = extract_episode(filename)
+        season = season_from_name if season_from_name else season_cfg
     if ep_num is None:
         logging.info("SKIPPED: episode not found - %s", filename)
         return

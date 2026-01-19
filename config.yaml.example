@@ -19,5 +19,5 @@ mappings:
     anime_key: example
     season: 1
     episode_offset:
-      start: 13     # mulai episode ini
-      subtract: 12  # jadi: episode_baru = episode_lama - 12
+      start: 1     # Mulai dari episode 1 (karena episode 1 perlu diubah)
+      subtract: 12  # jadi: episode_baru = episode_lama - 12 dan Negatif untuk menambah 12 (1 → 13, 2 → 14, dst.)

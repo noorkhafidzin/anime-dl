@@ -169,10 +169,28 @@ if selected == "Config Editor":
             subtract_val = episode_offset.get("subtract",0)
             if st.checkbox("Use Episode Offset", key=f"use_offset_{i}", value="episode_offset" in mapping):
                 start_val = st.number_input("Offset Start", value=start_val, min_value=1, key=f"offset_start_{i}")
-                subtract_val = st.number_input("Offset Subtract", value=subtract_val, min_value=0, key=f"offset_sub_{i}")
+                subtract_val = st.number_input("Offset Subtract", value=subtract_val, min_value=None, key=f"offset_sub_{i}")
                 mapping["episode_offset"] = {"start": start_val, "subtract": subtract_val}
             else:
                 mapping.pop("episode_offset", None)
+
+            # Source
+            source_val = st.text_input("Source URL", mapping.get("source", ""), key=f"map_source_{i}")
+            if source_val.strip():
+                mapping["source"] = source_val.strip()
+            else:
+                mapping.pop("source", None)
+
+            # Extract Latest
+            if st.checkbox("Use Extract Latest", key=f"use_extract_{i}", value="extract_latest" in mapping):
+                extract_latest = mapping.get("extract_latest", {})
+                type_options = ["function"]
+                type_val = st.selectbox("Extract Type", type_options, index=0 if extract_latest.get("type") == "function" else 0, key=f"extract_type_{i}")
+                module_val = st.text_input("Module", extract_latest.get("module", "custom_extractors"), key=f"extract_module_{i}")
+                function_val = st.text_input("Function", extract_latest.get("function", "extract_latest_default"), key=f"extract_function_{i}")
+                mapping["extract_latest"] = {"type": type_val, "module": module_val, "function": function_val}
+            else:
+                mapping.pop("extract_latest", None)
 
         colm1, colm2 = st.columns([0.2,0.8])
         with colm1:
@@ -236,9 +254,9 @@ if selected == "Logs":
     st.title("anime-dl Logs Viewer")
     st.initial_sidebar_state = "collapsed"
     LOG_FILES = {
-        "Log anime-dl": "../logs/anime-dl.log",
-        "Log API": "../logs/api.log",
-        "Log WEB": "../logs/web.log",
+        "Log anime-dl": os.path.normpath(os.path.join(BASE_DIR, "..", "logs", "anime-dl.log")),
+        "Log API": os.path.normpath(os.path.join(BASE_DIR, "..", "logs", "api.log")),
+        "Log WEB": os.path.normpath(os.path.join(BASE_DIR, "..", "logs", "web.log")),
     }
     
     # Sidebar Settings

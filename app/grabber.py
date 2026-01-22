@@ -1,20 +1,9 @@
 #!/usr/bin/env python3
-"""Simple grabber for anime episode pages.
+"""
+Anime episode grabber.
 
-Features:
-- Loads `config/config.yaml`.
-- For each mapping that includes a `source` URL, fetches the page
-  and extracts the latest episode link/title.
-- Fetches the episode page and extracts a download link by quality
-  and host priority.
-- Sends final download links to the local `api.py` `/add` endpoint.
-- Records discovered episode links into a sqlite DB to avoid
-  duplicate processing.
-- Can run once or be scheduled daily/weekly via simple scheduler
-  configured in `config/config.yaml` under `scheduler`.
-
-This implementation uses only stdlib plus `requests` and `pyyaml`
-which are already present in `requirements.txt`.
+Loads config, fetches pages, extracts latest episodes and download links,
+sends to API, tracks in DB, supports scheduling.
 """
 import os
 import re
@@ -105,43 +94,16 @@ def fetch_url(url, timeout=20):
     return r.text
 
 
-def extract_latest_episode(html, base_url=None):
-    # Try smokelister -> first <ul> -> first <a>
-    header_regex = re.compile(r'<div[^>]*class="smokelister"[^>]*>\s*<span[^>]*class="monktit"[^>]*>[^<]*episode list[^<]*', re.I)
-    m = header_regex.search(html)
-    if m:
-        slice_html = html[m.start():]
-        ul_match = re.search(r"<ul>([\s\S]*?)</ul>", slice_html, re.I)
-        if ul_match:
-            ul_content = ul_match.group(1)
-            item = re.search(r'<a\s+href="([^"]+)"[^>]*>([^<]+)</a>', ul_content, re.I)
-            if item:
-                link = item.group(1)
-                title = item.group(2).strip()
-                if base_url:
-                    link = urljoin(base_url, link)
-                return {"link": link, "title": title}
-
-    # Fallback: find first anchor that contains the word "Episode" or a number
-    fallback = re.search(r'<a\s+href="([^"]+)"[^>]*>([^<]*episode[^<]*|[^<]*\d{1,3}[^<]*)</a>', html, re.I)
-    if fallback:
-        link = fallback.group(1)
-        title = fallback.group(2).strip()
-        if base_url:
-            link = urljoin(base_url, link)
-        return {"link": link, "title": title}
-
-    raise RuntimeError("Latest episode block not found")
 
 
 def extract_latest_with_mapping(mapping, html, base_url=None):
     cfg = mapping.get("extract_latest")
     if not cfg:
-        return extract_latest_episode(html, base_url=base_url)
+        cfg = {"type": "function", "module": "custom_extractors", "function": "extract_latest_default"}
 
     t = cfg.get("type", "regex")
     if t == "smokelister":
-        return extract_latest_episode(html, base_url=base_url)
+        cfg = {"type": "function", "module": "custom_extractors", "function": "extract_latest_default"}
 
     if t == "regex":
         pattern = cfg.get("pattern")
@@ -191,48 +153,17 @@ def extract_latest_with_mapping(mapping, html, base_url=None):
     raise RuntimeError(f"Unknown extract_latest type: {t}")
 
 
-def extract_download_link(html, quality=DEFAULT_QUALITY, host_priority=None):
-    host_priority = host_priority or DEFAULT_HOST_PRIORITY
-    # Find marker for quality (e.g. <strong>Mp4 1080p</strong>)
-    marker_regex = re.compile(r"<strong>\s*(?:mp4|mkv)\s*" + re.escape(quality) + r"\s*</strong>", re.I)
-    m = marker_regex.search(html)
-    if not m:
-        raise RuntimeError(f"Section for quality {quality} not found")
-
-    marker_start = m.start()
-    # find nearest closing </li> after marker_start, else </ul>
-    li_end = html.find("</li>", marker_start)
-    ul_end = html.find("</ul>", marker_start)
-    end_index = li_end if (li_end != -1 and (li_end < ul_end or ul_end == -1)) else ul_end
-    if end_index == -1:
-        # as last resort, take 1000 chars after marker
-        block = html[marker_start: marker_start + 1000]
-    else:
-        block = html[marker_start:end_index]
-
-    for host in host_priority:
-        host_anchor = re.compile(r'<a[^>]+href="([^"]+)"[^>]*>\s*' + re.escape(host) + r"\s*</a>", re.I)
-        am = host_anchor.search(block)
-        if am:
-            return {"link": am.group(1), "host": host, "quality": quality}
-
-    raise RuntimeError(f"No hosts from priority list found for quality {quality}")
 
 
 def extract_download_with_mapping(mapping, html):
     cfg = mapping.get("extract_download")
     # if no mapping-specific config, use defaults
     if not cfg:
-        # pass through to default extractor
-        quality = mapping.get("target_quality") or DEFAULT_QUALITY
-        host_priority = mapping.get("host_priority")
-        return extract_download_link(html, quality=quality, host_priority=host_priority)
+        cfg = {"type": "function", "module": "custom_extractors", "function": "extract_download_default"}
 
     t = cfg.get("type", "quality_block")
     if t == "quality_block":
-        quality = cfg.get("quality") or mapping.get("target_quality") or DEFAULT_QUALITY
-        host_priority = cfg.get("host_priority") or mapping.get("host_priority") or DEFAULT_HOST_PRIORITY
-        return extract_download_link(html, quality=quality, host_priority=host_priority)
+        cfg = {"type": "function", "module": "custom_extractors", "function": "extract_download_default"}
 
     if t == "regex":
         pattern = cfg.get("pattern")

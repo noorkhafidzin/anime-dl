@@ -5,10 +5,12 @@ discord_webhook: "https://discord.com/api/webhooks/XXX/YYY"
 titles:
   naruto: "Naruto"
   example: "Contoh Anime"
+  golden_kamuy: "Golden Kamuy"
 
 library_dirs:
   naruto: /path/to/library/Naruto
   example: /path/to/library/Contoh
+  golden_kamuy: "/path/to/library/Golden Kamuy/Season 05"
 
 mappings:
   - pattern: "naruto"
@@ -21,3 +23,12 @@ mappings:
     episode_offset:
       start: 1     # Mulai dari episode 1 (karena episode 1 perlu diubah)
       subtract: 12  # jadi: episode_baru = episode_lama - 12 dan Negatif untuk menambah 12 (1 → 13, 2 → 14, dst.)
+  - pattern: "GK.*S5[-_.]*(?P<e>01)"
+    anime_key: golden_kamuy
+    season: 5
+    aliases: ["GK"]
+    source: "https://otakudesu.best/anime/kamuy-golden-season-5-sub-indo/"
+    extract_latest:
+      type: "function"
+      module: "custom_extractors"
+      function: "extract_latest_default"

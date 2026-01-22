@@ -44,15 +44,15 @@ Edit `config/config.yaml` to set:
 Example mapping:
 ```yaml
 mappings:
-  - pattern: "GK.*S5"
+  - pattern: "GK.*S5[-_.]*(?P<e>01)"
     anime_key: golden_kamuy
     season: 5
-    source: "https://example.com/anime/golden-kamuy-s5"
+    aliases: ["GK"]
+    source: "https://otakudesu.best/anime/kamuy-golden-season-5-sub-indo/"
     extract_latest:
-      type: "smokelister"
-    extract_download:
-      type: "quality_block"
-      quality: "1080p"
+      type: "function"
+      module: "custom_extractors"
+      function: "extract_latest_default"
     scheduler:
       type: "weekly"
       time: "19:00"

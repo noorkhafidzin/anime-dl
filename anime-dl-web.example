@@ -10,7 +10,7 @@ Group=el
 
 WorkingDirectory=/opt/anime-dl
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/anime-dl/.venv/bin/streamlit run web.py --server.port 8501 --server.address 0.0.0.0
+ExecStart=/opt/anime-dl/.venv/bin/streamlit run app/web.py --server.port 8501 --server.address 0.0.0.0
 
 Restart=always
 RestartSec=5

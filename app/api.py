@@ -2,6 +2,7 @@ import os
 import logging
 import threading
 import sys
+import time
 from logging.handlers import RotatingFileHandler
 from flask import Flask, request, jsonify
 from myjdapi import Myjdapi
@@ -83,24 +84,157 @@ class MyJDClient:
             self.device = device
             logging.warning("MyJDownloader connected successfully.")
 
+    def _move_package_to_downloadlist(self, pkg_uuid):
+        """
+        Pindahkan package dari Linkgrabber ke Downloadlist.
+        Mencoba dua strategi:
+          1. Query link_ids di dalam package, lalu move_to_downloadlist(link_ids, [pkg_uuid])
+          2. Fallback: move_to_downloadlist([], [pkg_uuid])
+        """
+        # --- Strategi 1: ambil link_ids dari dalam package ---
+        try:
+            links_in_pkg = self.device.linkgrabber.query_links([{
+                "packageUUIDs": [pkg_uuid],
+                "uuid": True
+            }])
+            link_ids = [lnk.get("uuid") for lnk in links_in_pkg if lnk.get("uuid")]
+            logging.info(f"Link IDs in package {pkg_uuid}: {link_ids}")
+
+            self.device.linkgrabber.move_to_downloadlist(link_ids, [pkg_uuid])
+            logging.info("Package moved to Downloadlist (strategy 1: with link_ids)")
+            return True
+
+        except Exception as e1:
+            logging.warning(f"Strategy 1 failed: {e1} — trying fallback (empty link_ids)...")
+
+        # --- Strategi 2: fallback link_ids kosong ---
+        try:
+            self.device.linkgrabber.move_to_downloadlist([], [pkg_uuid])
+            logging.info("Package moved to Downloadlist (strategy 2: empty link_ids)")
+            return True
+
+        except Exception as e2:
+            logging.error(f"Strategy 2 also failed: {e2}")
+            return False
+
+    def _wait_for_packages(self, max_retries=10, delay=2):
+        """
+        Tunggu sampai package muncul di Linkgrabber.
+        Retry loop karena JDownloader butuh waktu untuk memproses link menjadi package.
+        """
+        for attempt in range(1, max_retries + 1):
+            time.sleep(delay)
+
+            # Strategi 1: coba query_packages()
+            try:
+                packages = self.device.linkgrabber.query_packages()
+                if packages:
+                    logging.info(f"Found {len(packages)} package(s) via query_packages() (attempt {attempt})")
+                    return packages
+                logging.debug(f"query_packages() returned empty (attempt {attempt})")
+            except (AttributeError, Exception) as e:
+                logging.debug(f"query_packages() failed (attempt {attempt}): {e}")
+
+            # Strategi 2: coba query_links() dan extract unique package UUIDs
+            try:
+                links = self.device.linkgrabber.query_links()
+                if links:
+                    # Extract unique package UUIDs dari links
+                    pkg_uuids = []
+                    seen = set()
+                    for lnk in links:
+                        pkg_uuid = lnk.get("packageUUID") or lnk.get("packageUuid") or lnk.get("uuid")
+                        if pkg_uuid and pkg_uuid not in seen:
+                            seen.add(pkg_uuid)
+                            pkg_uuids.append({"uuid": pkg_uuid, "name": lnk.get("name", "")})
+                    if pkg_uuids:
+                        logging.info(f"Found {len(pkg_uuids)} package(s) via query_links() (attempt {attempt})")
+                        return pkg_uuids
+                    logging.debug(f"query_links() returned {len(links)} links but no package UUIDs (attempt {attempt})")
+            except (AttributeError, Exception) as e:
+                logging.debug(f"query_links() failed (attempt {attempt}): {e}")
+
+            logging.info(f"No packages found yet, retrying... ({attempt}/{max_retries})")
+
+        logging.warning(f"No packages found after {max_retries} attempts")
+        return []
+
     def add_links(self, links, package_name=None):
         try:
-            # Jika package_name tidak dikirim, JDownloader akan otomatis menentukan nama package
-            params = {
-                "autostart": True,
-                "links": "\n".join(links) if isinstance(links, list) else links,
-            }
-            
-            if package_name:
-                params["packageName"] = package_name
+            with self.lock:
+                # --- Tambahkan links ke Linkgrabber ---
+                params = {
+                    "links": "\n".join(links) if isinstance(links, list) else links,
+                }
+                if package_name:
+                    params["packageName"] = package_name
 
-            return self.device.linkgrabber.add_links([params])
+                result = self.device.linkgrabber.add_links([params])
+                logging.info(f"Links added to Linkgrabber: {result}")
 
-        except (MYJDTokenInvalidException, AttributeError):
-            logging.error("Token invalid or device disconnected → reconnecting...")
+                # --- Tunggu package muncul di Linkgrabber (retry loop) ---
+                packages = self._wait_for_packages(max_retries=10, delay=2)
+
+                if not packages:
+                    logging.warning("No packages found in Linkgrabber after all retries — link may be stuck")
+                    return result
+
+                # Ambil package terbaru (yang pertama = yang baru ditambahkan)
+                latest_pkg = packages[0]
+                pkg_uuid = latest_pkg.get("uuid") or latest_pkg.get("id")
+
+                if not pkg_uuid:
+                    logging.warning("Package UUID not found, skipping move")
+                    return result
+
+                logging.info(f"Moving package UUID {pkg_uuid} to Downloadlist...")
+                moved = self._move_package_to_downloadlist(pkg_uuid)
+
+                if moved:
+                    time.sleep(1)
+                    # Coba start download dengan berbagai method
+                    started = False
+                    for method_name in ["force_download", "start_download", "resume_download"]:
+                        try:
+                            method = getattr(self.device.downloads, method_name, None)
+                            if method:
+                                method()
+                                logging.info(f"Download started via downloads.{method_name}()")
+                                started = True
+                                break
+                        except Exception:
+                            pass
+
+                    if not started:
+                        # Fallback: coba downloadlist
+                        try:
+                            self.device.downloadlist.resume()
+                            logging.info("Download resumed via downloadlist.resume()")
+                        except Exception as e:
+                            logging.warning(f"Could not start download automatically: {e}")
+                            logging.info("Package already moved to Downloadlist — JDownloader will auto-process")
+                else:
+                    logging.warning("Failed to move package — link stuck in Linkgrabber")
+
+                return result
+
+        except (MYJDTokenInvalidException, AttributeError) as e:
+            logging.error(f"Token invalid or device disconnected ({e}) → reconnecting...")
             self.connect()
-            # Ulangi proses setelah reconnect
-            return self.device.linkgrabber.add_links([params])
+            try:
+                params = {
+                    "links": "\n".join(links) if isinstance(links, list) else links,
+                }
+                if package_name:
+                    params["packageName"] = package_name
+                return self.device.linkgrabber.add_links([params])
+            except Exception as retry_err:
+                logging.error(f"Failed to add links after reconnect: {retry_err}", exc_info=True)
+                raise
+
+        except Exception as e:
+            logging.error(f"Unexpected error in add_links: {e}", exc_info=True)
+            raise
 
 # =========================================================
 # API Endpoint
